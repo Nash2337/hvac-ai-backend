@@ -44,13 +44,37 @@ app.post("/ask", async (req, res) => {
     res.status(500).send("Error talking to AI");
   }
 });
-app.post("/call", (req, res) => {
-  res.type("text/xml");
-  res.send(`
-    <Response>
-      <Say>Connecting you now</Say>
-    </Response>
-  `);
+const axios = require("axios");
+
+app.post("/inbound_call", async (req, res) => {
+  try {
+    const caller = req.body.Caller;
+
+    const response = await axios.post(
+      "https://api.vapi.ai/call",
+      {
+        phoneCallProviderBypassEnabled: true,
+        customer: {
+          number: caller,
+        },
+        assistantId: process.env.ASSISTANT_ID,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.PRIVATE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    const twiml = response.data.phoneCallProviderDetails.twiml;
+
+    res.type("text/xml");
+    res.send(twiml);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send("Error handling call");
+  }
 });
 const PORT = process.env.PORT || 10000;
 
