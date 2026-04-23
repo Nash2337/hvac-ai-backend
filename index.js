@@ -45,8 +45,21 @@ app.post("/ask", async (req, res) => {
   }
 });
 const axios = require("axios");
-
 app.post("/inbound_call", async (req, res) => {
+  try {
+    res.type("text/xml");
+
+    res.send(`
+      <Response>
+        <Say>Connecting you now</Say>
+      </Response>
+    `);
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).send("Error handling call");
+  }
+});
   try {
     const caller = req.body.Caller;
 
