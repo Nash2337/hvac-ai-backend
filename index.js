@@ -1,30 +1,36 @@
-require("dotenv").config();
 const express = require("express");
 const axios = require("axios");
-const cors = require("cors");
+const bodyParser = require("body-parser");
 
 const app = express();
-app.use(cors());
-app.use(express.json());
+app.use(bodyParser.urlencoded({ extended: false }));
+app.use(bodyParser.json());
 
-// ✅ Health check (so Render doesn't crash)
+/**
+ * HEALTH CHECK (optional)
+ */
 app.get("/", (req, res) => {
-  res.send("HVAC AI backend running");
+  res.send("Server is live");
 });
 
-// ✅ Twilio → VAPI route
+/**
+ * INBOUND CALL FROM TWILIO
+ */
 app.post("/inbound_call", async (req, res) => {
   try {
     const caller = req.body.Caller || "unknown";
 
+    console.log("Incoming call from:", caller);
+
     const response = await axios.post(
       "https://api.vapi.ai/call",
       {
+        phoneNumberId: process.env.PHONE_NUMBER_ID,
+        assistantId: process.env.ASSISTANT_ID,
         phoneCallProviderBypassEnabled: true,
         customer: {
           number: caller,
         },
-        assistantId: process.env.ASSISTANT_ID,
       },
       {
         headers: {
@@ -39,11 +45,14 @@ app.post("/inbound_call", async (req, res) => {
     res.type("text/xml");
     res.send(twiml);
   } catch (error) {
-    console.error("ERROR:", error.response?.data || error.message);
+    console.error("VAPI ERROR:", error.response?.data || error.message);
     res.status(500).send("Error handling call");
   }
 });
 
+/**
+ * SERVER START
+ */
 const PORT = process.env.PORT || 10000;
 
 app.listen(PORT, () => {
