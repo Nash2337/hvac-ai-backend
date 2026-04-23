@@ -1,9 +1,11 @@
 require("dotenv").config();
+
 const express = require("express");
 const axios = require("axios");
 const cors = require("cors");
 const bodyParser = require("body-parser");
 const { Resend } = require("resend");
+const OpenAI = require("openai");
 
 const app = express();
 
@@ -12,22 +14,17 @@ app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
 const resend = new Resend(process.env.RESEND_API_KEY);
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
-/**
- * HEALTH CHECK
- */
 app.get("/", (req, res) => {
   res.send("HVAC AI backend running");
 });
 
-/**
- * TWILIO → VAPI HANDOFF
- */
 app.post("/inbound_call", async (req, res) => {
   try {
     const caller = req.body.Caller || "unknown";
-
-    console.log("Incoming call from:", caller);
 
     const response = await axios.post(
       "https://api.vapi.ai/call",
@@ -57,9 +54,6 @@ app.post("/inbound_call", async (req, res) => {
   }
 });
 
-/**
- * VAPI → EMAIL LEAD WEBHOOK
- */
 app.post("/vapi-webhook", async (req, res) => {
   try {
     const message = req.body.message || req.body;
@@ -67,15 +61,36 @@ app.post("/vapi-webhook", async (req, res) => {
 
     console.log("Webhook received:", type);
 
-    // Only trigger on end of call
     if (type !== "end-of-call-report") {
       return res.status(200).send("Ignored");
     }
 
     const call = message.call || {};
-    const summary = message.summary || "No summary provided.";
     const transcript = message.transcript || "No transcript provided.";
     const caller = call.customer?.number || "Unknown caller";
+
+    let summary = "No summary provided.";
+
+    try {
+      const ai = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content:
+              "Extract key HVAC lead info from this call. Return only this format:\nName:\nPhone:\nAddress:\nIssue:\nUrgency:\nNext Step:",
+          },
+          {
+            role: "user",
+            content: transcript,
+          },
+        ],
+      });
+
+      summary = ai.choices[0].message.content;
+    } catch (err) {
+      console.error("SUMMARY ERROR:", err.response?.data || err.message);
+    }
 
     await resend.emails.send({
       from: "HVAC AI <onboarding@resend.dev>",
@@ -99,17 +114,13 @@ ${transcript}
 
     res.status(200).send("Lead emailed");
   } catch (error) {
-    console.error("EMAIL ERROR:", error);
+    console.error("EMAIL ERROR:", error.response?.data || error.message);
     res.status(500).send("Webhook failed");
   }
 });
 
-/**
- * START SERVER
- */
 const PORT = process.env.PORT || 10000;
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
-   
