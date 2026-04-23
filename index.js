@@ -44,7 +44,14 @@ app.post("/ask", async (req, res) => {
     res.status(500).send("Error talking to AI");
   }
 });
-
+app.post("/call", (req, res) => {
+  res.type("text/xml");
+  res.send(`
+    <Response>
+      <Say>Connecting you now</Say>
+    </Response>
+  `);
+});
 const PORT = process.env.PORT || 10000;
 
 app.listen(PORT, () => {
